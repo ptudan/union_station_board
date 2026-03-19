@@ -146,15 +146,37 @@ function buildProviderData(provider, providerKey, rows) {
   const calendarsByService = new Map(rows.calendar.map((c) => [c.service_id, c]));
   const calendarDatesByService = parseCalendarDates(rows.calendar_dates);
 
+  // Track min/max stop_sequence across all stops for each trip so we can
+  // tell whether a Union Station stop is a terminus (first or last stop).
+  const tripSequenceRange = new Map();
+  for (const st of rows.stop_times) {
+    const seq = Number(st.stop_sequence || 0);
+    const existing = tripSequenceRange.get(st.trip_id);
+    if (!existing) {
+      tripSequenceRange.set(st.trip_id, { min: seq, max: seq });
+    } else {
+      if (seq < existing.min) existing.min = seq;
+      if (seq > existing.max) existing.max = seq;
+    }
+  }
+
   const stopEvents = rows.stop_times
     .filter((st) => unionStopIds.has(st.stop_id))
-    .map((st) => ({
-      tripId: st.trip_id,
-      stopId: st.stop_id,
-      arrivalSecs: parseGtfsTimeToSeconds(st.arrival_time),
-      departureSecs: parseGtfsTimeToSeconds(st.departure_time),
-      stopSequence: Number(st.stop_sequence || 0)
-    }))
+    .map((st) => {
+      const seq = Number(st.stop_sequence || 0);
+      const range = tripSequenceRange.get(st.trip_id);
+      const isFirstStop = range && seq === range.min;
+      const isLastStop  = range && seq === range.max;
+      return {
+        tripId: st.trip_id,
+        stopId: st.stop_id,
+        // At a terminus only one direction is meaningful: suppress the
+        // departure when it's the last stop and the arrival when it's the first.
+        arrivalSecs:   isFirstStop ? null : parseGtfsTimeToSeconds(st.arrival_time),
+        departureSecs: isLastStop  ? null : parseGtfsTimeToSeconds(st.departure_time),
+        stopSequence: seq
+      };
+    })
     .filter((st) => st.arrivalSecs !== null || st.departureSecs !== null);
 
   return {

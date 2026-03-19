@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Union Station Ticker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: "Arial Narrow", Arial, sans-serif;
+    }
+
+    /* ── ticker bar ───────────────────────────────────────────── */
+    #ticker {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 52px;
+      display: flex;
+      align-items: stretch;
+      overflow: hidden;
+    }
+
+    /* left label badge */
+    #ticker-label {
+      flex-shrink: 0;
+      min-width: 120px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #label-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      height: 100%;
+      padding: 0 14px;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: #fff;
+    }
+
+    /* scrolling track */
+    #ticker-track-wrap {
+      flex: 1;
+      overflow: hidden;
+      background: rgba(10, 10, 20, 0.88);
+      backdrop-filter: blur(4px);
+      border-bottom: 2px solid rgba(255,255,255,0.08);
+      position: relative;
+    }
+
+    #ticker-track {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      position: absolute;
+      left: 0;
+      top: 0;
+      white-space: nowrap;
+      will-change: transform;
+    }
+
+    /* individual event chips */
+    .tick-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 24px;
+      height: 100%;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      color: #f0f0f0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .tick-item .logo {
+      height: 26px;
+      width: auto;
+      display: block;
+      filter: brightness(0) invert(1);
+      flex-shrink: 0;
+    }
+    .tick-item .logo-marc { height: 18px; }
+
+    /* VRE logo keeps its own colours */
+    .tick-item .logo-vre {
+      filter: none;
+      height: 22px;
+    }
+
+    .tick-item .time {
+      color: #ffd166;
+      font-variant-numeric: tabular-nums;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .tick-item .delay {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0;
+    }
+    .tick-item .delay.late  { background: #e63946; color: #fff; }
+    .tick-item .delay.early { background: #2dc653; color: #fff; }
+    .tick-item .delay.on    { background: rgba(255,255,255,0.12); color: #aaa; }
+
+    .tick-item .headsign {
+      color: #c0d6ff;
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .tick-item .fact-star {
+      font-size: 18px;
+      color: #ffd166;
+    }
+
+    /* separator dot between events */
+    .tick-sep {
+      display: inline-flex;
+      align-items: center;
+      height: 100%;
+      padding: 0 10px;
+      color: rgba(255,255,255,0.2);
+      font-size: 22px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="ticker">
+  <div id="ticker-label">
+    <div id="label-inner">
+      <span id="label-text"></span>
+    </div>
+  </div>
+  <div id="ticker-track-wrap">
+    <div id="ticker-track"></div>
+  </div>
+</div>
+
+<script>
+/* ── constants ──────────────────────────────────────────────── */
+const LOGO = {
+  Amtrak: { src: "/amtrak.svg",     cls: "logo" },
+  MARC:   { src: "/MARC_train.svg", cls: "logo logo-marc" },
+  VRE:    { src: "/vre.svg",        cls: "logo logo-vre" }
+};
+
+const LABEL_CONFIGS = {
+  departures: { bg: "#1a1a2e", text: "Departures" },
+  arrivals:   { bg: "#16213e", text: "Arrivals" },
+  funfact:    { bg: "#2d1b4e", text: "Did You Know?" }
+};
+
+const RUNS = ["departures", "arrivals", "funfact"];
+
+const FACTS = [
+  "Washington Union Station opened in 1907 and was the largest train station in the world at the time.",
+  "During World War II, Union Station handled over 200,000 passengers per day at its wartime peak.",
+  "The station's main hall ceiling soars 96 feet high, modeled after the ancient Baths of Diocletian in Rome.",
+  "After decades of decline, Union Station was fully restored in a $160 million renovation completed in 1988.",
+  "VRE was founded in 1992 and today carries around 19,000 daily commuters between Northern Virginia and DC.",
+  "MARC Train covers 178 route miles across three lines — Penn, Camden, and Brunswick.",
+  "Amtrak's Acela, which stops here, is the fastest train in the Americas, reaching up to 150 mph.",
+  "Union Station is the second busiest rail station in the US, with over 5 million Amtrak passengers per year.",
+];
+
+const SPEED_PX_S    = 80;   // scroll speed in pixels per second
+const START_DWELL   = 2200; // pause at start before scrolling (ms)
+const END_DWELL     = 900;  // pause after scrolling off (ms)
+const FACT_DWELL    = 7000; // how long to show a fun fact (ms)
+const LABEL_ANIM    = 360;  // label drop-down duration (ms)
+const REFRESH_MS    = 60_000;
+const WINDOW_MINS   = 60;
+
+/* ── state ──────────────────────────────────────────────────── */
+let departures = [];
+let arrivals   = [];
+let runIndex   = 0;
+let factIndex  = 0;
+
+/* ── DOM refs ───────────────────────────────────────────────── */
+const labelEl   = document.getElementById("ticker-label");
+const labelInner= document.getElementById("label-inner");
+const labelText = document.getElementById("label-text");
+const track     = document.getElementById("ticker-track");
+const wrap      = document.getElementById("ticker-track-wrap");
+
+/* ── helpers ────────────────────────────────────────────────── */
+const sleep     = ms => new Promise(r => setTimeout(r, ms));
+const nextFrame = ()  => new Promise(r => requestAnimationFrame(r));
+
+async function fetchData() {
+  try {
+    const res = await fetch(`/api/board?windowMinutes=${WINDOW_MINS}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    departures = data.events.filter(e => e.eventType === "departure");
+    arrivals   = data.events.filter(e => e.eventType === "arrival");
+  } catch (_) {}
+}
+
+/* ── label animation ────────────────────────────────────────── */
+function applyLabelConfig(key) {
+  const cfg = LABEL_CONFIGS[key];
+  labelEl.style.background = cfg.bg;
+  labelText.textContent    = cfg.text;
+}
+
+function setLabelY(pct) {
+  labelInner.style.transition = "none";
+  labelInner.style.transform  = `translateY(${pct}%)`;
+  labelInner.offsetHeight; // force reflow
+}
+
+function animateLabelTo(pct) {
+  return new Promise(resolve => {
+    labelInner.style.transition = `transform ${LABEL_ANIM}ms cubic-bezier(0.4,0,0.2,1)`;
+    labelInner.style.transform  = `translateY(${pct}%)`;
+    setTimeout(resolve, LABEL_ANIM);
+  });
+}
+
+async function swapLabel(nextKey) {
+  await animateLabelTo(100);   // slide current label down and out
+  applyLabelConfig(nextKey);
+  setLabelY(-100);             // reposition above, invisible
+  await animateLabelTo(0);     // slide new label down into view
+}
+
+/* ── track content builders ─────────────────────────────────── */
+function buildEventContent(events, type) {
+  track.innerHTML = "";
+
+  if (!events.length) {
+    const empty = document.createElement("span");
+    empty.className = "tick-item";
+    empty.textContent = `No ${type} in the next hour`;
+    track.appendChild(empty);
+    return;
+  }
+
+  events.forEach((ev, i) => {
+    if (i > 0) {
+      const sep = document.createElement("span");
+      sep.className = "tick-sep";
+      sep.textContent = "·";
+      track.appendChild(sep);
+    }
+
+    const item = document.createElement("div");
+    item.className = "tick-item";
+
+    const logoInfo = LOGO[ev.provider];
+    if (logoInfo) {
+      const img = document.createElement("img");
+      img.src       = logoInfo.src;
+      img.className = logoInfo.cls;
+      img.alt       = ev.provider;
+      item.appendChild(img);
+    }
+
+    const timeEl = document.createElement("span");
+    timeEl.className = "time";
+    timeEl.textContent = new Date(ev.estimatedTime).toLocaleTimeString("en-US", {
+      hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York"
+    });
+    item.appendChild(timeEl);
+
+    const nameEl = document.createElement("span");
+    nameEl.textContent = [ev.trainId, ev.route].filter(Boolean).join(" · ");
+    item.appendChild(nameEl);
+
+    if (ev.headsign) {
+      const hs = document.createElement("span");
+      hs.className   = "headsign";
+      hs.textContent = "→ " + ev.headsign;
+      item.appendChild(hs);
+    }
+
+    const delay = ev.delayMinutes ?? 0;
+    const badge = document.createElement("span");
+    badge.className   = "delay " + (delay > 1 ? "late" : delay < -1 ? "early" : "on");
+    badge.textContent = delay > 1 ? `+${delay}m` : delay < -1 ? `${delay}m` : "On time";
+    item.appendChild(badge);
+
+    track.appendChild(item);
+  });
+}
+
+function buildFactContent(fact) {
+  track.innerHTML = "";
+  const item = document.createElement("div");
+  item.className = "tick-item";
+
+  const star = document.createElement("span");
+  star.className   = "fact-star";
+  star.textContent = "★";
+  item.appendChild(star);
+
+  const text = document.createElement("span");
+  text.textContent = fact;
+  item.appendChild(text);
+
+  track.appendChild(item);
+}
+
+/* ── scroll animation ───────────────────────────────────────── */
+let scrollRafId = null;
+
+function scrollTrack(from, to, durationMs) {
+  return new Promise(resolve => {
+    let start = null;
+    function step(ts) {
+      if (!start) start = ts;
+      const t = Math.min((ts - start) / durationMs, 1);
+      track.style.transform = `translateX(${from + (to - from) * t}px)`;
+      if (t < 1) {
+        scrollRafId = requestAnimationFrame(step);
+      } else {
+        scrollRafId = null;
+        resolve();
+      }
+    }
+    scrollRafId = requestAnimationFrame(step);
+  });
+}
+
+/* ── main run loop ──────────────────────────────────────────── */
+async function runLoop() {
+  while (true) {
+    const runType = RUNS[runIndex % RUNS.length];
+
+    // ① Build content for this run
+    if (runType === "funfact") {
+      buildFactContent(FACTS[factIndex % FACTS.length]);
+    } else {
+      buildEventContent(runType === "departures" ? departures : arrivals, runType);
+    }
+
+    // ② Snap to left edge and measure
+    track.style.transform = "translateX(0)";
+    await nextFrame();
+    await nextFrame(); // two frames to ensure images don't affect layout
+
+    const wrapW  = wrap.offsetWidth;
+    const totalW = track.scrollWidth;
+
+    // ③ Opening dwell — content visible at left edge
+    const openDwell = runType === "funfact" ? FACT_DWELL : START_DWELL;
+    await sleep(openDwell);
+
+    // ④ Scroll everything off to the left
+    const scrollDist = totalW;
+    const scrollDur  = (scrollDist / SPEED_PX_S) * 1000;
+    await scrollTrack(0, -scrollDist, scrollDur);
+
+    // ⑤ Closing dwell (content is off-screen — safe to rebuild behind the scenes)
+    await sleep(END_DWELL);
+
+    // ⑥ Advance counters
+    if (runType === "funfact") factIndex++;
+    runIndex++;
+    const nextType = RUNS[runIndex % RUNS.length];
+
+    // ⑦ Silently load next content while track is off-screen
+    if (nextType === "funfact") {
+      buildFactContent(FACTS[factIndex % FACTS.length]);
+    } else {
+      buildEventContent(nextType === "departures" ? departures : arrivals, nextType);
+    }
+
+    // ⑧ Swap the label badge with the drop-down animation
+    await swapLabel(nextType);
+
+    // ⑨ Snap track to x=0 — content appears as label finishes sliding in
+    track.style.transform = "translateX(0)";
+
+    // ⑩ Refresh data at the top of each full cycle
+    if (runIndex % RUNS.length === 0) {
+      fetchData(); // fire and forget — won't interrupt animation
+    }
+  }
+}
+
+/* ── init ───────────────────────────────────────────────────── */
+async function init() {
+  applyLabelConfig(RUNS[0]);
+  setLabelY(0);
+  await fetchData();
+  runLoop();
+}
+
+init();
+</script>
+</body>
+</html>
