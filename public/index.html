@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Union Station Board</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="header">
+        <h1>Union Station Board</h1>
+        <p id="meta">Loading...</p>
+      </header>
+
+      <section class="controls">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="arrival">Arrivals</button>
+        <button class="chip" data-filter="departure">Departures</button>
+        <button class="chip" id="refresh-btn">Refresh</button>
+      </section>
+
+      <section class="controls">
+        <button class="chip" data-window="15">15 min</button>
+        <button class="chip" data-window="30">30 min</button>
+        <button class="chip active" data-window="60">1 hr</button>
+        <button class="chip" data-window="240">4 hr</button>
+        <button class="chip" data-window="720">12 hr</button>
+        <button class="chip" data-window="1440">24 hr</button>
+      </section>
+
+      <section id="warnings" class="warnings"></section>
+
+      <section class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Provider</th>
+              <th>Type</th>
+              <th>Train</th>
+              <th>Route</th>
+              <th>Headsign</th>
+              <th>Delay</th>
+            </tr>
+          </thead>
+          <tbody id="board-body"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+  </html>

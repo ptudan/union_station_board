@@ -1,0 +1,17 @@
+{
+  "name": "union-station-board",
+  "version": "0.1.0",
+  "description": "Simple Union Station arrivals/departures board for Amtrak, MARC, and VRE.",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "csv-parse": "^5.5.6",
+    "express": "^4.21.2",
+    "gtfs-realtime-bindings": "^1.1.1"
+  }
+}

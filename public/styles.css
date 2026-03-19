@@ -1,0 +1,151 @@
+:root {
+  color-scheme: dark;
+  --bg: #0a0f16;
+  --panel: #121b27;
+  --line: #213044;
+  --text: #f4f8ff;
+  --muted: #9fb1c6;
+  --good: #4ee17b;
+  --warn: #ffba49;
+  --bad: #ff6f6f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  background: radial-gradient(circle at 20% 0%, #1a2738 0%, var(--bg) 45%);
+  color: var(--text);
+}
+
+.layout {
+  width: min(1200px, 94vw);
+  margin: 1.5rem auto 2rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.4vw, 2rem);
+}
+
+.header p {
+  margin-top: 0.5rem;
+  color: var(--muted);
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--panel);
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: #6ea2ff;
+  box-shadow: inset 0 0 0 1px #6ea2ff;
+}
+
+.warnings {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.warning {
+  border: 1px solid #4f3822;
+  background: #2b2118;
+  color: #ffcf8a;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+}
+
+.table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0e1621cc;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+th {
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.arrival {
+  border-color: #3a7956;
+  color: var(--good);
+}
+
+.departure {
+  border-color: #396ea1;
+  color: #8fc6ff;
+}
+
+.delay.ok {
+  color: var(--good);
+}
+
+.delay.warn {
+  color: var(--warn);
+}
+
+.delay.bad {
+  color: var(--bad);
+}
+
+.delay.early {
+  color: #7bd1ff;
+}
+
+@media (max-width: 900px) {
+  th:nth-child(5),
+  td:nth-child(5),
+  th:nth-child(6),
+  td:nth-child(6) {
+    display: none;
+  }
+}
