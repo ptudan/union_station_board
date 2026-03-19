@@ -62,22 +62,30 @@ function safeLower(value) {
   return String(value || "").toLowerCase();
 }
 
-function isUnionStop(stop) {
-  const name = safeLower(stop.stop_name);
-  if (!name.includes("union")) return false;
-  if (!name.includes("station")) return false;
-  const desc = safeLower(stop.stop_desc);
-  const city = safeLower(stop.stop_city);
-  const code = safeLower(stop.stop_code);
-  const parent = safeLower(stop.parent_station);
-  return (
-    name.includes("washington") ||
-    desc.includes("washington") ||
-    city === "washington" ||
-    code === "was" ||
-    parent.includes("was")
-  );
-}
+const UNION_STOP_MATCHERS = {
+  // MARC uses "UNION STATION MARC Washington" with city/code identifiers.
+  marc(stop) {
+    const name = safeLower(stop.stop_name);
+    if (!name.includes("union") || !name.includes("station")) return false;
+    const desc = safeLower(stop.stop_desc);
+    const city = safeLower(stop.stop_city);
+    const code = safeLower(stop.stop_code);
+    const parent = safeLower(stop.parent_station);
+    return (
+      name.includes("washington") ||
+      desc.includes("washington") ||
+      city === "washington" ||
+      code === "was" ||
+      parent.includes("was")
+    );
+  },
+  // VRE uses a bare "Union Station" parent stop (location_type 1) with no city metadata.
+  // Timed stop_times reference child platform stops parented to it.
+  vre(stop) {
+    const name = safeLower(stop.stop_name);
+    return name.trim() === "union station" && stop.location_type === "1";
+  }
+};
 
 function serviceRunsOnDate(calendarRow, date) {
   if (!calendarRow) return false;
@@ -121,9 +129,16 @@ function isServiceActive(serviceId, date, calendarsByService, calendarDatesBySer
   return serviceRunsOnDate(calendarsByService.get(serviceId), date);
 }
 
-function buildProviderData(provider, rows) {
+function buildProviderData(provider, providerKey, rows) {
   const stops = rows.stops;
-  const unionStopIds = new Set(stops.filter(isUnionStop).map((s) => s.stop_id));
+  const isUnionStop = UNION_STOP_MATCHERS[providerKey];
+  const unionParentStopIds = new Set(stops.filter(isUnionStop).map((s) => s.stop_id));
+  const unionStopIds = new Set(unionParentStopIds);
+  for (const stop of stops) {
+    if (unionParentStopIds.has(stop.parent_station)) {
+      unionStopIds.add(stop.stop_id);
+    }
+  }
   const stopLookup = new Map(stops.map((s) => [s.stop_id, s]));
 
   const routesById = new Map(rows.routes.map((r) => [r.route_id, r]));
@@ -177,7 +192,7 @@ async function loadProviderData(key) {
     calendar_dates: parseCsvFromZip(zip, "calendar_dates.txt")
   };
 
-  const data = buildProviderData(source.provider, rows);
+  const data = buildProviderData(source.provider, key, rows);
   gtfsCache.set(key, { loadedAt: Date.now(), data });
   return data;
 }
@@ -253,7 +268,11 @@ function buildRailEventsForWindow(providerData, realtimeMap, windowStart, window
         trainId: trip.trip_short_name || trip.trip_headsign || stopEvent.tripId,
         route: route?.route_short_name || route?.route_long_name || "",
         headsign: trip.trip_headsign || "",
-        station: stop?.stop_name || "Washington Union Station",
+        // Prefer parent stop name (e.g. VRE child stops are platform numbers like "22", "Lead").
+        station:
+          (stop?.parent_station && providerData.stopLookup.get(stop.parent_station)?.stop_name) ||
+          stop?.stop_name ||
+          "Washington Union Station",
         eventType: candidate.type,
         scheduledTime: scheduled.toISOString(),
         estimatedTime: estimated.toISOString(),
